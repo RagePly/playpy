@@ -12,4 +12,5 @@ Just some small and possibly obscure scripts I've written
 - Json Parser: Some attempts at writing json parsers using parser-combinators. Solutions in less than 100 loc.
   - [funjson.py](./funjson.py): Parser-combinators using only functions that doesnt look appealing.
   - [oojson.py](./oojson.py): Parser-combinators using Object Oriented constructs as an attempt at writing more visually pleasing combinators.
+- [svt\_fetch\_rss.py](./svt_fetch/svt_fetch_rss.py): I got annoyed that I can't see edits on news articles, especially when I want to point out journalists' grammar mistakes. This script is part of a small project to monitor the history of SVT's headlines. This script's sole purpose is to output the text of all headline-articles into a folder.
 
