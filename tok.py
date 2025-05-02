@@ -12,6 +12,6 @@ string1 = r"\"(?:\\\"|[^\"])*\""
 string2 = r"'(?:\\'|[^'])*'"
 op = r"[*+^:!|#@$%&/=\\\-`~]+"
 contr = r"[\[\]{}(),.]"
-r = "|".join([var, num, string1, string2, op, contr]
+r = "|".join([var, num, string1, string2, op, contr])
 
 print("\n".join(re.findall(r, inp)))
