@@ -12,7 +12,6 @@ F = _F (_F)
 
 def _curry(n, f):
     def _w(x,l):
-        nonlocal f,n
         l = l + [x]
         if len(l) == n:
             return f(*l)
