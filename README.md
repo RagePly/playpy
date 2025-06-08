@@ -14,4 +14,5 @@ Just some small and possibly obscure scripts I've written
   - [oojson.py](./oojson.py): Parser-combinators using Object Oriented constructs as an attempt at writing more visually pleasing combinators.
 - [svt\_fetch\_rss.py](./svt_fetch/svt_fetch_rss.py): I got annoyed that I can't see edits on news articles, especially when I want to point out journalists' grammar mistakes. This script is part of a small project to monitor the history of SVT's headlines. This script's sole purpose is to output the text of all headline-articles into a folder.
 - [nda.py](./nda.py): A simple N-dimensional array library. Not complete, but some *numpy*-inspired dispatching works.
+- [koket.py](./recept-fetch/koket.py): A script for fetching all ingredients in a [köket](https://www.koket.se/)-recipy and generating a report of them.
 
