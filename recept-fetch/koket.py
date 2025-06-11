@@ -28,9 +28,23 @@ TITLE = "Köket.se Ingrediensutskrift"
 NAME_TITLE = "Ingrediens"
 AMOUNT_TITLE = "Mängd"
 UNIT_TITLE = "Enhet"
+INDICATION_TITLE = "Angivelse"
+NOTE_TITLE = "Anteckningar"
 
-AMOUNT_UNIT_NAME_RE = re.compile(r"^(\d+(?:,\d+)?)\s+" + f"({'|'.join(UNITS)})" r"\s+(.*)$")
-AMOUNT_ST_NAME_RE  = re.compile(r"^(\d+(?:,\d+)?)\s+(.*)$")
+TITLES = [
+    NAME_TITLE,
+    AMOUNT_TITLE,
+    UNIT_TITLE,
+    INDICATION_TITLE,
+    NOTE_TITLE,
+]
+
+AMOUNT_RE = r"((?:ca )?(?:\d+(?:,\d+)?)|(?:(?:\d+(?:,\d+)?)-(?:\d+(?:,\d+)?)))"
+NOTE_RE = r"\((.*)\)"
+NAME_RE = r"(.*?)(?:, (.*?))?(?:\s+\((.*)\))?"
+AMOUNT_UNIT_NAME_RE = re.compile(r"^" + AMOUNT_RE + r"\s+" + f"({'|'.join(UNITS)})" + r"\s+" + NAME_RE + r"$")
+AMOUNT_ST_NAME_RE  = re.compile(r"^" + AMOUNT_RE + r"\s+" + NAME_RE + r"$")
+DEFAULT_RE = re.compile(r"^" + NAME_RE + f"$")
 
 ## Helpers ##
 
@@ -47,18 +61,51 @@ def is_tag(value: typing.Any) -> typing.TypeGuard[bs4.Tag]:
 ## Ingredient class ##
 
 @dataclasses.dataclass
+class Amount:
+    almost: bool
+
+    @staticmethod
+    def from_amount(amount_spec: str):
+        if (almost := amount_spec.startswith("ca ")):
+            amount_spec = amount_spec.removeprefix("ca ")
+
+        if "-" in amount_spec:
+            start, end = amount_spec.split("-")
+            return AmountRange(almost, int_or_float(start), int_or_float(end))
+        return AmountSet(almost, int_or_float(amount_spec))
+
+    def __str__(self) -> str:
+        almost = "ca " if self.almost else ""
+        if isinstance(self, AmountRange):
+            return almost + f"{self.start}-{self.end}"
+        return almost + str(self.amount)
+
+@dataclasses.dataclass
+class AmountRange(Amount):
+    start: int | float
+    end: int | float
+
+@dataclasses.dataclass
+class AmountSet(Amount):
+    amount: int | float
+
+@dataclasses.dataclass
 class IngredientEntry:
     amount: int | float | None
     unit: str | None
     name: str
+    indication: str | None
+    note: str | None
 
     @staticmethod
     def parse(text: str) -> "IngredientEntry":
         if (m := AMOUNT_UNIT_NAME_RE.fullmatch(text)) is not None:
-            return IngredientEntry(int_or_float(m[1]), m[2], m[3])
+            return IngredientEntry(Amount.from_amount(m[1]), m[2], m[3], m[4], m[5])
         elif (m := AMOUNT_ST_NAME_RE.fullmatch(text)) is not None:
-            return IngredientEntry(int_or_float(m[1]), "st", m[2])
-        return IngredientEntry(None, None, text)
+            return IngredientEntry(Amount.from_amount(m[1]), "st", m[2], m[3], m[4])
+        elif (m := DEFAULT_RE.fullmatch(text)) is not None:
+            return IngredientEntry(None, None, m[1], m[2], m[3])
+        raise Exception("invalid ingredient format: " + text)
 
 Ingredients: typing.TypeAlias = dict[str | None, list[IngredientEntry]]
 
@@ -105,15 +152,14 @@ def get_width_of_col(name: str, ingredients: Ingredients) -> int:
     return max_width
 
 def get_widths(ingredients: Ingredients) -> tuple[int, int, int]:
-    name_width = max(len(NAME_TITLE), get_width_of_col("name", ingredients))
-    amount_width = max(len(AMOUNT_TITLE), get_width_of_col("amount", ingredients))
-    unit_width = max(len(UNIT_TITLE), get_width_of_col("unit", ingredients))
-    return name_width, amount_width, unit_width
+    widths = [max(len(title), get_width_of_col(name, ingredients))
+              for title, name in zip(TITLES, ["name", "amount", "unit", "indication", "note"])]
+    return widths
 
 def get_total_width(ingredients: Ingredients) -> int:
-    markup_width = sum(map(len, [LEFT_MARKER, INTERSPERSE_MARKER * 2, RIGHT_MARKER]))
-    name_width, amount_width, unit_width = get_widths(ingredients)
-    return markup_width + name_width + amount_width + unit_width
+    markup_width = sum(map(len, [LEFT_MARKER, INTERSPERSE_MARKER * 4, RIGHT_MARKER]))
+    widths = get_widths(ingredients)
+    return markup_width + sum(widths)
 
 def write_title(ingredients: Ingredients, title: str):
     title = f"** {title.capitalize()} **" if title else ""
@@ -122,21 +168,25 @@ def write_title(ingredients: Ingredients, title: str):
     return title.rjust(remaining_width // 2 + len(title))
 
 def write_header(ingredients: Ingredients) -> str:
-    name_width, amount_width, unit_width = get_widths(ingredients)
+    name_width, amount_width, unit_width, indication_width, note_width = get_widths(ingredients)
     return LEFT_MARKER + \
         NAME_TITLE.ljust(name_width) + INTERSPERSE_MARKER + \
         AMOUNT_TITLE.ljust(amount_width) + INTERSPERSE_MARKER + \
-        UNIT_TITLE.ljust(unit_width) + RIGHT_MARKER
+        UNIT_TITLE.ljust(unit_width) + INTERSPERSE_MARKER + \
+        INDICATION_TITLE.ljust(indication_width) + INTERSPERSE_MARKER + \
+        NOTE_TITLE.ljust(note_width) + RIGHT_MARKER
 
 def write_seperator(ingredients: Ingredients) -> str:
-    name_width, amount_width, unit_width = get_widths(ingredients)
+    name_width, amount_width, unit_width, indication_width, note_width = get_widths(ingredients)
     return LEFT_MARKER + \
         "-"*name_width + INTERSPERSE_MARKER + \
         "-"*amount_width + INTERSPERSE_MARKER + \
-        "-"*unit_width + RIGHT_MARKER
+        "-"*unit_width + INTERSPERSE_MARKER + \
+        "-"*indication_width + INTERSPERSE_MARKER + \
+        "-"*note_width + RIGHT_MARKER
 
 def write_collection(ingredients: Ingredients) -> typing.Generator[str]:
-    name_width, amount_width, unit_width = get_widths(ingredients)
+    name_width, amount_width, unit_width, indication_width, note_width = get_widths(ingredients)
 
     for i, (collection, ingredient_list) in enumerate(ingredients.items()):
         if i != 0: yield ""
@@ -150,10 +200,14 @@ def write_collection(ingredients: Ingredients) -> typing.Generator[str]:
             name = entry.name or ""
             amount = str(entry.amount) if entry.amount is not None else ""
             unit = str(entry.unit) if entry.unit is not None else ""
+            indication = str(entry.indication) if entry.indication is not None else ""
+            note = str(entry.note) if entry.note is not None else ""
             yield LEFT_MARKER + \
                 name.ljust(name_width) + INTERSPERSE_MARKER + \
                 amount.rjust(amount_width) + INTERSPERSE_MARKER + \
-                unit.ljust(unit_width) + RIGHT_MARKER
+                unit.ljust(unit_width) + INTERSPERSE_MARKER + \
+                indication.ljust(indication_width) + INTERSPERSE_MARKER + \
+                note.ljust(note_width) + RIGHT_MARKER
 
 def create_report(url: str) -> typing.Generator[str]:
     document = fetch_strategy_online(url)
