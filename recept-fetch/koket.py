@@ -6,10 +6,12 @@ import dataclasses
 import re
 import datetime
 import sys
+import os 
 
 ## Configuration ##
 
 UNITS = [
+    "krm",
     "tsk",
     "msk",
     "dl",
@@ -141,7 +143,7 @@ def handle_document(parser: bs4.BeautifulSoup) -> Ingredients:
 ## Output-formatting ##
 
 def get_width_of_col(name: str, ingredients: Ingredients) -> int:
-    max_width = len(name)
+    max_width = 0
     for collection in ingredients.values():
         for cell in collection:
             value = getattr(cell, name)
@@ -216,7 +218,7 @@ def create_report(url: str) -> typing.Generator[str]:
     # Get author name
     author = parser.find(class_ = starts_with("author_wrapper"))
     assert is_tag(author)
-    author_text = author.p.span.a.string or ""
+    author_text = author.p.span.a.string if author.p is not None else ""
 
     # Get recipy title
     title = parser.find(class_ = starts_with("recipe_title"))
@@ -233,12 +235,31 @@ def create_report(url: str) -> typing.Generator[str]:
     yield ""
     yield from write_collection(ingredients)
 
+def send_ntfy(title: str, content: str):
+    url = "https://ntfy.sh/" + os.environ["NTFY_ID"]
+    r = requests.post(url,
+        data=f"```{content}\n```",
+        headers={
+            "Title": title,
+            "Markdown": "1"
+        })
+    
+    if r.ok:
+        print(f"Recept skickat till {url}.")
+    else:
+        print(f"Recept EJ skickat till {url}", sys.stderr)
+        exit(1)
+
 if __name__ == "__main__":
     # document = fetch_strategy_file("res/potatis.html")
     match sys.argv:
-        case [_, url]:
-            print("\n".join(create_report(url)))
-            exit(0)
+        case [_, "send", url]:
+            report = "\n".join(create_report(url))
+            send_ntfy("Nytt recept!", report)
+        case [_, "print", url]:
+            report = "\n".join(create_report(url))
+            print(report)
         case [prog, *_]:
-            print(f"usage: python {prog} URL", file=sys.stderr)
+            print(f"usage: python {prog} send/print URL", file=sys.stderr)
             exit(1)
+
